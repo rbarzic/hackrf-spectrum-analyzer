@@ -1,8 +1,13 @@
-# This will build windows and linux versions of required native libraries 
+# Build Linux native libraries by default; add BUILD_WINDOWS=y for Windows too.
 # The following utilities have to be installed (tested on ubuntu 18.04):
 # build-essential ant git libusb-1.0 libfftw3-dev libfftw3-bin mingw-w64 openjdk-8 libfftw3-bin libusb-1.0  
 
+# Use the system JDK unless JAVA_HOME is explicitly set.
+export JAVA_HOME ?= /usr/lib/jvm/default-java
+export PATH := $(JAVA_HOME)/bin:$(PATH)
+
 #Settings:
+BUILD_WINDOWS ?= n
 IS_RELEASE					= y
 
 # object files path
@@ -93,7 +98,10 @@ $(MAIN_JAR):
 	mv build/*.jar $(OUTPUT_PATH)/lib/
 
 .PHONY: zip_file
-zip_file: $(DLL_LIB) $(DLL_LIB_WIN)
+zip_file: $(DLL_LIB)
+ifeq ($(BUILD_WINDOWS), y)
+zip_file: $(DLL_LIB_WIN)
+endif
 	mkdir -p $(RELEASE_DIR)
 	rm -f $(ZIP_FILE_PATH)/$(ZIP_FILE)
 	cd $(ZIP_FILE_PATH) && zip -r $(ZIP_FILE) *
@@ -105,13 +113,19 @@ patch_hackrf:
 	(cd lib/hackrf/ && git reset --hard v2024.02.1 && git apply < ../../src-c/0001-hackrf_sweep-to-library-conversion-v2024.02.1.patch)
 
 .PHONY: prepare
-prepare: dirs $(OBJECTS) $(OBJECTS_WIN) $(DLL_LIB_FFTW)
-	mkdir -p $(OUTPUT_DLL_DIR) $(OUTPUT_DLL_DIR_WIN)	
+prepare: dirs $(OBJECTS)
+ifeq ($(BUILD_WINDOWS), y)
+prepare: $(OBJECTS_WIN) $(DLL_LIB_FFTW)
+endif
+	mkdir -p $(OUTPUT_DLL_DIR)
 	cp -f lib/program.ico lib/program.png $(OUTPUT_DLL_DIR)/../
 	cp lib/launchers/hackrf_sweep_spectrum_analyzer_linux.sh $(OUTPUT_PATH)
-	cp lib/launchers/hackrf_sweep_spectrum_analyzer_windows.cmd $(OUTPUT_PATH)
 	chmod +x $(OUTPUT_PATH)/hackrf_sweep_spectrum_analyzer_linux.sh #linux launcher
+ifeq ($(BUILD_WINDOWS), y)
+	mkdir -p $(OUTPUT_DLL_DIR_WIN)
+	cp lib/launchers/hackrf_sweep_spectrum_analyzer_windows.cmd $(OUTPUT_PATH)
 	cp -f $(DLL_LIB_FFTW) $(DLL_LIB_PTHREAD) $(DLL_LIB_USB) $(OUTPUT_DLL_DIR_WIN)
+endif
 
 # if native header in hackrf lib changes, rebuild with "make jnabridge" - but openjdk-8 is required - jnaerator does not work with jdk9+
 .PHONY: jnabridge
